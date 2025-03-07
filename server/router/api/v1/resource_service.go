@@ -152,8 +152,8 @@ func (s *APIV1Service) GetResourceBinary(ctx context.Context, request *v1pb.GetR
                         return nil, status.Errorf(codes.Internal, "failed to find memo by ID: %v", resource.MemoID)
                 }
                 if memo != nil && memo.Visibility == storepb.Visibility_PRIVATE {
-                        //Bypass user check for private memo resources.
-                }else if memo != nil && memo.Visibility != store.Public {
+                        // Bypass user check for private memo resources.
+                } else if memo != nil && memo.Visibility != storepb.Visibility_PUBLIC {
                         user, err := s.GetCurrentUser(ctx)
                         if err != nil {
                                 return nil, status.Errorf(codes.Internal, "failed to get current user: %v", err)
@@ -161,7 +161,7 @@ func (s *APIV1Service) GetResourceBinary(ctx context.Context, request *v1pb.GetR
                         if user == nil {
                                 return nil, status.Errorf(codes.Unauthenticated, "unauthorized access")
                         }
-                        if memo.Visibility == store.Private && user.ID != resource.CreatorID {
+                        if memo.CreatorID != user.ID {
                                 return nil, status.Errorf(codes.Unauthenticated, "unauthorized access")
                         }
                 }
@@ -170,8 +170,6 @@ func (s *APIV1Service) GetResourceBinary(ctx context.Context, request *v1pb.GetR
         if request.Thumbnail && util.HasPrefixes(resource.Type, SupportedThumbnailMimeTypes...) {
                 thumbnailBlob, err := s.getOrGenerateThumbnail(resource)
                 if err != nil {
-                        // thumbnail failures are logged as warnings and not cosidered critical failures as
-                        // a resource image can be used in its place.
                         slog.Warn("failed to get resource thumbnail image", slog.Any("error", err))
                 } else {
                         return &httpbody.HttpBody{
@@ -196,7 +194,6 @@ func (s *APIV1Service) GetResourceBinary(ctx context.Context, request *v1pb.GetR
                 Data:        blob,
         }, nil
 }
-
 
 func (s *APIV1Service) UpdateResource(ctx context.Context, request *v1pb.UpdateResourceRequest) (*v1pb.Resource, error) {
 	resourceUID, err := ExtractResourceUIDFromName(request.Resource.Name)
