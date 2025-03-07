@@ -189,23 +189,28 @@ func (s *APIV1Service) ListMemos(ctx context.Context, request *v1pb.ListMemosReq
 }
 
 func (s *APIV1Service) GetMemo(ctx context.Context, request *v1pb.GetMemoRequest) (*v1pb.Memo, error) {
-	memoUID, err := ExtractMemoUIDFromName(request.Name)
-	if err != nil {
-		return nil, status.Errorf(codes.InvalidArgument, "invalid memo name: %v", err)
-	}
-	memo, err := s.Store.GetMemo(ctx, &store.FindMemo{
-		UID: &memoUID,
-	})
-	if err != nil {
-		return nil, err
-	}
-	if memo == nil {
-		return nil, status.Errorf(codes.NotFound, "memo not found")
-	}
-	if memo.Visibility != store.Public {
+    memoUID, err := ExtractMemoUIDFromName(request.Name)
+    if err != nil {
+        return nil, status.Errorf(codes.InvalidArgument, "invalid memo name: %v", err)
+    }
+    memo, err := s.Store.GetMemo(ctx, &store.FindMemo{
+        UID: &memoUID,
+    })
+    if err != nil {
+        return nil, err
+    }
+    if memo == nil {
+        return nil, status.Errorf(codes.NotFound, "memo not found")
+    }
+    if memo.Visibility != store.Public {
         // If the memo is private, bypass the user check
         if memo.Visibility == store.Private {
             // Proceed to convert and return the memo
+            memoMessage, err := s.convertMemoFromStore(ctx, memo)
+            if err != nil {
+                return nil, errors.Wrap(err, "failed to convert memo")
+            }
+            return memoMessage, nil
         } else {
             // For protected and other visibilities, keep the existing user checks
             user, err := s.GetCurrentUser(ctx)
@@ -215,13 +220,17 @@ func (s *APIV1Service) GetMemo(ctx context.Context, request *v1pb.GetMemoRequest
             if user == nil {
                 return nil, status.Errorf(codes.PermissionDenied, "permission denied")
             }
-	}
+            if memo.Visibility == store.Private && memo.CreatorID != user.ID {
+                return nil, status.Errorf(codes.PermissionDenied, "permission denied")
+            }
+        }
+    }
 
-	memoMessage, err := s.convertMemoFromStore(ctx, memo)
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to convert memo")
-	}
-	return memoMessage, nil
+    memoMessage, err := s.convertMemoFromStore(ctx, memo)
+    if err != nil {
+        return nil, errors.Wrap(err, "failed to convert memo")
+    }
+    return memoMessage, nil
 }
 
 func (s *APIV1Service) UpdateMemo(ctx context.Context, request *v1pb.UpdateMemoRequest) (*v1pb.Memo, error) {
