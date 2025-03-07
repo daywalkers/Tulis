@@ -129,70 +129,70 @@ func (s *APIV1Service) GetResource(ctx context.Context, request *v1pb.GetResourc
 }
 
 func (s *APIV1Service) GetResourceBinary(ctx context.Context, request *v1pb.GetResourceBinaryRequest) (*httpbody.HttpBody, error) {
-        resourceUID, err := ExtractResourceUIDFromName(request.Name)
-        if err != nil {
-                return nil, status.Errorf(codes.InvalidArgument, "invalid resource id: %v", err)
-        }
-        resource, err := s.Store.GetResource(ctx, &store.FindResource{
-                GetBlob: true,
-                UID:     &resourceUID,
-        })
-        if err != nil {
-                return nil, status.Errorf(codes.Internal, "failed to get resource: %v", err)
-        }
-        if resource == nil {
-                return nil, status.Errorf(codes.NotFound, "resource not found")
-        }
-        // Check the related memo visibility.
-        if resource.MemoID != nil {
-                memo, err := s.Store.GetMemo(ctx, &store.FindMemo{
-                        ID: resource.MemoID,
-                })
-                if err != nil {
-                        return nil, status.Errorf(codes.Internal, "failed to find memo by ID: %v", resource.MemoID)
-                }
-                if memo != nil && memo.Visibility == storepb.Visibility_PRIVATE {
-                        // Bypass user check for private memo resources.
-                } else if memo != nil && memo.Visibility != storepb.Visibility_PUBLIC {
-                        user, err := s.GetCurrentUser(ctx)
-                        if err != nil {
-                                return nil, status.Errorf(codes.Internal, "failed to get current user: %v", err)
-                        }
-                        if user == nil {
-                                return nil, status.Errorf(codes.Unauthenticated, "unauthorized access")
-                        }
-                        if memo.CreatorID != user.ID {
-                                return nil, status.Errorf(codes.Unauthenticated, "unauthorized access")
-                        }
-                }
-        }
+	resourceUID, err := ExtractResourceUIDFromName(request.Name)
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "invalid resource id: %v", err)
+	}
+	resource, err := s.Store.GetResource(ctx, &store.FindResource{
+		GetBlob: true,
+		UID:     &resourceUID,
+	})
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "failed to get resource: %v", err)
+	}
+	if resource == nil {
+		return nil, status.Errorf(codes.NotFound, "resource not found")
+	}
+	// Check the related memo visibility.
+	if resource.MemoID != nil {
+		memo, err := s.Store.GetMemo(ctx, &store.FindMemo{
+			ID: resource.MemoID,
+		})
+		if err != nil {
+			return nil, status.Errorf(codes.Internal, "failed to find memo by ID: %v", resource.MemoID)
+		}
+		if memo != nil && memo.Visibility != store.Public && !memo.HasLinkAccess() {
+    user, err := s.GetCurrentUser(ctx)
+			if err != nil {
+				return nil, status.Errorf(codes.Internal, "failed to get current user: %v", err)
+			}
+			if user == nil {
+				return nil, status.Errorf(codes.Unauthenticated, "unauthorized access")
+			}
+			if memo.Visibility == store.Private && user.ID != resource.CreatorID {
+				return nil, status.Errorf(codes.Unauthenticated, "unauthorized access")
+			}
+		}
+	}
 
-        if request.Thumbnail && util.HasPrefixes(resource.Type, SupportedThumbnailMimeTypes...) {
-                thumbnailBlob, err := s.getOrGenerateThumbnail(resource)
-                if err != nil {
-                        slog.Warn("failed to get resource thumbnail image", slog.Any("error", err))
-                } else {
-                        return &httpbody.HttpBody{
-                                ContentType: resource.Type,
-                                Data:        thumbnailBlob,
-                        }, nil
-                }
-        }
+	if request.Thumbnail && util.HasPrefixes(resource.Type, SupportedThumbnailMimeTypes...) {
+		thumbnailBlob, err := s.getOrGenerateThumbnail(resource)
+		if err != nil {
+			// thumbnail failures are logged as warnings and not cosidered critical failures as
+			// a resource image can be used in its place.
+			slog.Warn("failed to get resource thumbnail image", slog.Any("error", err))
+		} else {
+			return &httpbody.HttpBody{
+				ContentType: resource.Type,
+				Data:        thumbnailBlob,
+			}, nil
+		}
+	}
 
-        blob, err := s.GetResourceBlob(resource)
-        if err != nil {
-                return nil, status.Errorf(codes.Internal, "failed to get resource blob: %v", err)
-        }
+	blob, err := s.GetResourceBlob(resource)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "failed to get resource blob: %v", err)
+	}
 
-        contentType := resource.Type
-        if strings.HasPrefix(contentType, "text/") {
-                contentType += "; charset=utf-8"
-        }
+	contentType := resource.Type
+	if strings.HasPrefix(contentType, "text/") {
+		contentType += "; charset=utf-8"
+	}
 
-        return &httpbody.HttpBody{
-                ContentType: contentType,
-                Data:        blob,
-        }, nil
+	return &httpbody.HttpBody{
+		ContentType: contentType,
+		Data:        blob,
+	}, nil
 }
 
 func (s *APIV1Service) UpdateResource(ctx context.Context, request *v1pb.UpdateResourceRequest) (*v1pb.Resource, error) {
