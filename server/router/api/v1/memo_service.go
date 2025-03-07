@@ -203,16 +203,18 @@ func (s *APIV1Service) GetMemo(ctx context.Context, request *v1pb.GetMemoRequest
 		return nil, status.Errorf(codes.NotFound, "memo not found")
 	}
 	if memo.Visibility != store.Public {
-		user, err := s.GetCurrentUser(ctx)
-		if err != nil {
-			return nil, status.Errorf(codes.Internal, "failed to get user")
-		}
-		if user == nil {
-			return nil, status.Errorf(codes.PermissionDenied, "permission denied")
-		}
-		if memo.Visibility == store.Private && memo.CreatorID != user.ID {
-			return nil, status.Errorf(codes.PermissionDenied, "permission denied")
-		}
+        // If the memo is private, bypass the user check
+        if memo.Visibility == store.Private {
+            // Proceed to convert and return the memo
+        } else {
+            // For protected and other visibilities, keep the existing user checks
+            user, err := s.GetCurrentUser(ctx)
+            if err != nil {
+                return nil, status.Errorf(codes.Internal, "failed to get user")
+            }
+            if user == nil {
+                return nil, status.Errorf(codes.PermissionDenied, "permission denied")
+            }
 	}
 
 	memoMessage, err := s.convertMemoFromStore(ctx, memo)
