@@ -151,8 +151,8 @@ func (s *APIV1Service) GetResourceBinary(ctx context.Context, request *v1pb.GetR
 		if err != nil {
 			return nil, status.Errorf(codes.Internal, "failed to find memo by ID: %v", resource.MemoID)
 		}
-		if memo != nil && memo.Visibility != store.Public && !memo.HasLinkAccess() {
-    user, err := s.GetCurrentUser(ctx)
+		if memo != nil && memo.Visibility != store.Public {
+			user, err := s.GetCurrentUser(ctx)
 			if err != nil {
 				return nil, status.Errorf(codes.Internal, "failed to get current user: %v", err)
 			}
