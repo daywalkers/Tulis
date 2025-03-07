@@ -110,18 +110,11 @@ type DeleteMemo struct {
 	ID int32
 }
 
-// memo.go
 func (s *Store) CreateMemo(ctx context.Context, create *Memo) (*Memo, error) {
-    // Replace the UID validation
-    if !isValidShortUID(create.UID) {
-        return nil, errors.New("invalid uid format (must be 3 letters + 4 digits)")
-    }
-    return s.driver.CreateMemo(ctx, create)
-}
-func isValidShortUID(uid string) bool {
-    // Regex: 3 lowercase letters followed by 4 digits
-    matched, _ := regexp.MatchString(`^[a-z]{3}\d{4}$`, uid)
-    return matched
+	if !util.UIDMatcher.MatchString(create.UID) {
+		return nil, errors.New("invalid uid")
+	}
+	return s.driver.CreateMemo(ctx, create)
 }
 
 func (s *Store) ListMemos(ctx context.Context, find *FindMemo) ([]*Memo, error) {
@@ -141,13 +134,11 @@ func (s *Store) GetMemo(ctx context.Context, find *FindMemo) (*Memo, error) {
 	return memo, nil
 }
 
-// memo.go
-func (s *Store) CreateMemo(ctx context.Context, create *Memo) (*Memo, error) {
-    // Replace the UID validation
-    if !isValidShortUID(create.UID) {
-        return nil, errors.New("invalid uid format (must be 3 letters + 4 digits)")
-    }
-    return s.driver.CreateMemo(ctx, create)
+func (s *Store) UpdateMemo(ctx context.Context, update *UpdateMemo) error {
+	if update.UID != nil && !util.UIDMatcher.MatchString(*update.UID) {
+		return errors.New("invalid uid")
+	}
+	return s.driver.UpdateMemo(ctx, update)
 }
 
 func (s *Store) DeleteMemo(ctx context.Context, delete *DeleteMemo) error {
